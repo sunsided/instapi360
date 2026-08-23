@@ -2,8 +2,14 @@
 name = "instapi360-cli"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
-description = "CLI to list and download original media from the Insta360 cloud."
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+description = "Command-line tool to list and download your own original Insta360 cloud media."
+categories = ["command-line-utilities", "multimedia::video"]
 
 [[bin]]
 name = "instapi360"
@@ -16,7 +22,7 @@ default = ["login"]
 login = ["dep:chromiumoxide", "dep:futures"]
 
 [dependencies]
-instapi360-cloud = { path = "../instapi360-cloud" }
+instapi360-cloud = { path = "../instapi360-cloud", version = "0.1.0" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "fs", "time"] }
 clap = { workspace = true }
 anyhow = { workspace = true }

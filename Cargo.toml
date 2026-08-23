@@ -10,6 +10,9 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/sunsided/instapi360"
+homepage = "https://github.com/sunsided/instapi360"
+readme = "README.md"
+keywords = ["insta360", "cloud", "camera", "video", "download"]
 rust-version = "1.82"
 
 [workspace.dependencies]
