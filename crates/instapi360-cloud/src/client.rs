@@ -181,30 +181,23 @@ impl Client {
         })
     }
 
-    /// Refresh an expiring session (`/account/v2/refreshToken`).
+    /// Renew the session (`GET openapi-*/account/v2/refreshToken`).
+    ///
+    /// The current token authenticates the call and the API mints a fresh one
+    /// in `data.token` — no separate refresh token is required, so a session can
+    /// be rolled forward indefinitely as long as it is renewed before it lapses.
     pub async fn refresh(&self, session: &Session) -> Result<Session> {
-        let refresh = session
-            .refresh_token
-            .clone()
-            .ok_or_else(|| Error::Auth("no refresh token in session".into()))?;
         #[derive(serde::Deserialize)]
         struct RefreshData {
-            #[serde(alias = "accessToken", alias = "access_token")]
             token: String,
-            #[serde(alias = "refreshToken", alias = "refresh_token")]
-            refresh_token: Option<String>,
-            #[serde(alias = "expire", alias = "expireTime", alias = "expires_in")]
-            expire: Option<i64>,
         }
-        let body = serde_json::json!({ "refresh_token": refresh });
         let url = format!("{}/account/v2/refreshToken", self.base);
-        let d: RefreshData = self
-            .request(Method::POST, &url, Some(session), &[], Some(body))
-            .await?;
+        let d: RefreshData = self.request(Method::GET, &url, Some(session), &[], None).await?;
+        let expires_at = jwt_exp(&d.token);
         Ok(Session {
             user_token: d.token,
-            refresh_token: d.refresh_token.or(session.refresh_token.clone()),
-            expires_at: d.expire,
+            refresh_token: session.refresh_token.clone(),
+            expires_at,
             user_id: session.user_id.clone(),
         })
     }
@@ -278,6 +271,17 @@ fn as_str(v: &Value, keys: &[&str]) -> Option<String> {
         }
     }
     None
+}
+
+/// Decode a JWT's `exp` (unix seconds) without verifying the signature.
+pub fn jwt_exp(token: &str) -> Option<i64> {
+    use base64::Engine;
+    let payload = token.split('.').nth(1)?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .ok()?;
+    let v: Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("exp").and_then(|x| x.as_i64())
 }
 
 fn classify(media_type: Option<&str>, name: &str) -> MediaKind {

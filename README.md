@@ -31,23 +31,33 @@ cargo run -p instapi360-cli -- --help
 
 ## Usage
 ```sh
-# 1. store your own session token (from the desktop/mobile app you're signed into)
+# 1. store your own session token, once (from the app you're signed into)
 instapi360 import-token "<session-token>"
 
-# 2. use it — the equipment code auto-detects your host and is remembered
+# 2. use it — equipment code auto-detects your host and is remembered
 instapi360 whoami
 instapi360 list --all
 instapi360 download <mediaId> --out ./footage      # grabs all parts (.insv + .lrv)
 instapi360 download all --out ./footage --resume
+
+# 3. keep the session alive headlessly (no re-login)
+instapi360 refresh        # or let commands auto-renew when near expiry
 ```
 
 ## How it works
-- Authentication is your session token alone (sent as a header); there is no
-  extra request signing for listing or downloading.
-- Listing and download resolution are simple authenticated GET requests.
-- Downloads resolve to short-lived CDN URLs and stream with **resumable, ranged**
-  transfers; multi-file media (video + proxy, or dual-lens parts) are grouped and
-  saved together as one asset.
+- **Sign in once, stay signed in.** Authentication is your session token alone
+  (sent as a header) — no request signing. The token lives ~30 days and is
+  renewed via `/account/v2/refreshToken`, which mints a fresh token from the
+  current one (no separate refresh token). `whoami`/`list`/`download`
+  auto-renew when the token is within a few days of expiring, so a single
+  import keeps working indefinitely.
+- Email/password `login` is intentionally **not** implemented: the sign-in
+  endpoint is reCAPTCHA-gated, so credential login only works in a real
+  browser. Import a token instead; refresh does the rest.
+- Listing and download resolution are authenticated GET requests. Downloads
+  resolve to short-lived CDN URLs and stream with **resumable, ranged**
+  transfers; multi-file media (video + proxy, or dual-lens parts) are grouped
+  and saved together as one asset.
 
 ## Design
 `instapi360-cloud` is deliberately dependency-light and platform-agnostic
@@ -55,7 +65,7 @@ instapi360 download all --out ./footage --resume
 can be embedded in other apps — desktop or mobile — not just this CLI.
 
 ## Roadmap
-- Headless email/password login.
+- Browser-assisted first login (solve the captcha once, capture the token automatically).
 - Media metadata (camera, timestamps, gyro/immersion data) surfaced in `list`.
 
 ## License

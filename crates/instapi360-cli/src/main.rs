@@ -1,8 +1,9 @@
 //! `instapi360` — CLI over `instapi360-cloud`: import a session token, inspect the
 //! account, list cloud media, and download originals.
 //!
-//! Auth strategy ships in the order from the project plan: `import-token`
-//! (working today) → `login` (headless credentials, once signing is finalized).
+//! Session model: import a token once (from the app you're signed into), then
+//! the session renews itself headlessly via `/account/v2/refreshToken` — no
+//! repeated login. Credential `login` is blocked by reCAPTCHA and is a stub.
 
 mod store;
 
@@ -52,12 +53,18 @@ impl From<RegionArg> for Region {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Store an `X-User-Token` captured from the app / mitmproxy (auth 5c).
+    /// Store a session token (and optional refresh token) from the app, so the
+    /// CLI can act headlessly and renew the session without re-login.
     ImportToken {
-        /// The raw token value.
+        /// The session/access token value.
         token: String,
+        /// Optional refresh token, to renew the session via `refresh`.
+        #[arg(long)]
+        refresh_token: Option<String>,
     },
-    /// Log in headlessly with credentials (auth 5b — needs finalized signing).
+    /// Renew the stored session (mints a fresh token from the current one).
+    Refresh,
+    /// Credential login — blocked by reCAPTCHA; prints guidance. Use import-token.
     Login {
         #[arg(long, env = "INSTA360_EMAIL")]
         email: String,
@@ -141,12 +148,58 @@ fn load_session(store: &FileSessionStore) -> Result<Session> {
         .ok_or_else(|| anyhow!("no session — run `instapi360 import-token <TOKEN>` first"))
 }
 
+/// Seconds before expiry at which we proactively renew (3 days).
+const REFRESH_MARGIN_SECS: i64 = 3 * 24 * 3600;
+
+fn now_unix() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// A human note like " (expires in 29 days)" from a unix-seconds expiry.
+fn expiry_note(exp: i64) -> String {
+    let days = (exp - now_unix()) / 86_400;
+    if days < 0 {
+        " (expired)".to_string()
+    } else {
+        format!(" (expires in {days} days)")
+    }
+}
+
+/// Load the session and renew it if it is missing an expiry or within the
+/// refresh margin, persisting the fresh token. Keeps the CLI usable without the
+/// user ever manually refreshing.
+async fn ensure_fresh(client: &Client, store: &FileSessionStore) -> Result<Session> {
+    let session = load_session(store)?;
+    let due = session
+        .expires_at
+        .map(|e| now_unix() >= e - REFRESH_MARGIN_SECS)
+        .unwrap_or(true);
+    if !due {
+        return Ok(session);
+    }
+    match client.refresh(&session).await {
+        Ok(renewed) => {
+            store.save(&renewed)?;
+            Ok(renewed)
+        }
+        // If renewal fails but the token is still valid, proceed with it.
+        Err(e) if session.expires_at.map(|x| now_unix() < x).unwrap_or(true) => {
+            eprintln!("warning: token refresh failed ({e}); using existing token");
+            Ok(session)
+        }
+        Err(e) => Err(e).context("session expired and refresh failed — re-import a token"),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "insta360=info".into()),
+                .unwrap_or_else(|_| "instapi360=info".into()),
         )
         .with_writer(std::io::stderr)
         .init();
@@ -158,21 +211,38 @@ async fn main() -> Result<()> {
     let client = Client::new(build_config(&cli, equipment_code)).context("building client")?;
 
     match &cli.cmd {
-        Command::ImportToken { token } => {
-            let session = Session::from_token(token.trim());
+        Command::ImportToken { token, refresh_token } => {
+            let mut session = Session::from_token(token.trim());
+            session.refresh_token = refresh_token.as_ref().map(|s| s.trim().to_string());
+            session.expires_at = instapi360_cloud::jwt_exp(&session.user_token);
             store.save(&session)?;
-            println!("Token stored at {}", store.path().display());
+            println!(
+                "Token stored at {}{}",
+                store.path().display(),
+                session.expires_at.map(expiry_note).unwrap_or_default()
+            );
+        }
+
+        Command::Refresh => {
+            let session = load_session(&store)?;
+            let renewed = client.refresh(&session).await.context("refreshing session")?;
+            store.save(&renewed)?;
+            println!(
+                "Session refreshed{}",
+                renewed.expires_at.map(expiry_note).unwrap_or_default()
+            );
         }
 
         Command::Login { email: _, password: _ } => {
             return Err(anyhow!(
-                "headless login not yet available — request signing is still being \
-                 reverse-engineered (plan Steps 2–3). Use `import-token` for now."
+                "headless email/password login is blocked by reCAPTCHA on the sign-in \
+                 endpoint. Use `import-token` (with --refresh-token) instead; the session \
+                 renews via `refresh` without re-login."
             ));
         }
 
         Command::Whoami => {
-            let session = load_session(&store)?;
+            let session = ensure_fresh(&client, &store).await?;
             let p = client.profile(&session).await.context("fetching profile")?;
             println!(
                 "user_id: {}\nemail:   {}\nname:    {}",
@@ -183,7 +253,7 @@ async fn main() -> Result<()> {
         }
 
         Command::List { count, all } => {
-            let session = load_session(&store)?;
+            let session = ensure_fresh(&client, &store).await?;
             let mut cursor = PageCursor::first(*count);
             let mut shown = 0u64;
             loop {
@@ -265,7 +335,7 @@ async fn main() -> Result<()> {
         }
 
         Command::Download { target, out, resume } => {
-            let session = load_session(&store)?;
+            let session = ensure_fresh(&client, &store).await?;
             let ids: Vec<MediaId> = if target == "all" {
                 let mut cursor = PageCursor::first(100);
                 let mut acc = Vec::new();

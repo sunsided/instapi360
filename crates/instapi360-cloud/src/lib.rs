@@ -10,11 +10,11 @@
 //!   `AsyncWrite`; session persistence is a caller-provided [`SessionStore`].
 //!
 //! ## Status
-//! The endpoint surface and the HMAC-SHA256 signing scheme are reverse-
-//! engineered from Insta360 Studio + the Android app (see the project plan).
-//! The signing **key** and exact identity constants are recovered via traffic
-//! capture; until [`ClientConfig`] carries them, signed endpoints return
-//! [`Error::Signing`]. Token-import + OSS download work without them.
+//! Authentication is the session token alone — no request signing for
+//! list/download. Import a token once and the session renews itself via
+//! [`Client::refresh`] (the API mints a fresh token from the current one, so no
+//! separate refresh token is needed). Credential login is reCAPTCHA-gated and
+//! not implemented here.
 //!
 //! ## Quick start
 //! ```no_run
@@ -37,7 +37,7 @@ mod model;
 mod session;
 mod signing;
 
-pub use client::Client;
+pub use client::{jwt_exp, Client};
 pub use config::{ClientConfig, Platform, Region};
 pub use download::ProgressSink;
 pub use error::{Error, Result};
