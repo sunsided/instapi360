@@ -39,7 +39,7 @@ pub async fn run(store: &FileSessionStore) -> Result<()> {
     let handler_task = tokio::spawn(async move {
         while let Some(ev) = handler.next().await {
             if let Err(e) = ev {
-                eprintln!("CDP handler error: {e:?}");
+                tracing::debug!("CDP handler error: {e:?}");
                 break;
             }
         }
