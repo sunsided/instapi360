@@ -20,7 +20,11 @@ use store::{AppConfig, FileSessionStore};
 use tokio::io::BufWriter;
 
 #[derive(Parser)]
-#[command(name = "instapi360", version, about = "List and download original media from the Insta360 cloud")]
+#[command(
+    name = "instapi360",
+    version,
+    about = "List and download original media from the Insta360 cloud"
+)]
 struct Cli {
     /// Cloud region.
     #[arg(long, value_enum, default_value = "global", global = true)]
@@ -211,7 +215,10 @@ async fn main() -> Result<()> {
     let client = Client::new(build_config(&cli, equipment_code)).context("building client")?;
 
     match &cli.cmd {
-        Command::ImportToken { token, refresh_token } => {
+        Command::ImportToken {
+            token,
+            refresh_token,
+        } => {
             let mut session = Session::from_token(token.trim());
             session.refresh_token = refresh_token.as_ref().map(|s| s.trim().to_string());
             session.expires_at = instapi360_cloud::jwt_exp(&session.user_token);
@@ -225,7 +232,10 @@ async fn main() -> Result<()> {
 
         Command::Refresh => {
             let session = load_session(&store)?;
-            let renewed = client.refresh(&session).await.context("refreshing session")?;
+            let renewed = client
+                .refresh(&session)
+                .await
+                .context("refreshing session")?;
             store.save(&renewed)?;
             println!(
                 "Session refreshed{}",
@@ -233,7 +243,10 @@ async fn main() -> Result<()> {
             );
         }
 
-        Command::Login { email: _, password: _ } => {
+        Command::Login {
+            email: _,
+            password: _,
+        } => {
             return Err(anyhow!(
                 "headless email/password login is blocked by reCAPTCHA on the sign-in \
                  endpoint. Use `import-token` (with --refresh-token) instead; the session \
@@ -297,10 +310,18 @@ async fn main() -> Result<()> {
                 .ok()
                 .and_then(|r| r.content_length())
                 .unwrap_or(0);
-            let part = FilePart { file_name: sanitize(&file_name), size, url: url.clone(), md5: None };
+            let part = FilePart {
+                file_name: sanitize(&file_name),
+                size,
+                url: url.clone(),
+                md5: None,
+            };
             let dest = out.join(&part.file_name);
             let from = if *resume {
-                tokio::fs::metadata(&dest).await.map(|m| m.len()).unwrap_or(0)
+                tokio::fs::metadata(&dest)
+                    .await
+                    .map(|m| m.len())
+                    .unwrap_or(0)
             } else {
                 0
             };
@@ -334,7 +355,11 @@ async fn main() -> Result<()> {
             println!("Saved {}", dest.display());
         }
 
-        Command::Download { target, out, resume } => {
+        Command::Download {
+            target,
+            out,
+            resume,
+        } => {
             let session = ensure_fresh(&client, &store).await?;
             let ids: Vec<MediaId> = if target == "all" {
                 let mut cursor = PageCursor::first(100);
@@ -382,7 +407,10 @@ async fn download_one(
     for part in &parts {
         let dest = asset_dir.join(sanitize(&part.file_name));
         let from = if resume {
-            tokio::fs::metadata(&dest).await.map(|m| m.len()).unwrap_or(0)
+            tokio::fs::metadata(&dest)
+                .await
+                .map(|m| m.len())
+                .unwrap_or(0)
         } else {
             0
         };
@@ -441,6 +469,12 @@ fn human_size(bytes: u64) -> String {
 
 fn sanitize(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_alphanumeric() || matches!(c, '.' | '_' | '-') { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }

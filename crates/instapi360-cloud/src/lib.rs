@@ -41,8 +41,6 @@ pub use client::{jwt_exp, Client};
 pub use config::{ClientConfig, Platform, Region};
 pub use download::ProgressSink;
 pub use error::{Error, Result};
-pub use model::{
-    Envelope, FilePart, Media, MediaId, MediaKind, MediaPage, PageCursor, Profile,
-};
+pub use model::{Envelope, FilePart, Media, MediaId, MediaKind, MediaPage, PageCursor, Profile};
 pub use session::{Session, SessionStore};
 pub use signing::{Signature, Signer};

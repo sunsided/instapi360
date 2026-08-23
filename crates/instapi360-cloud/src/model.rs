@@ -103,7 +103,10 @@ impl PageCursor {
         PageCursor { page: 1, count }
     }
     pub fn next(&self) -> Self {
-        PageCursor { page: self.page + 1, count: self.count }
+        PageCursor {
+            page: self.page + 1,
+            count: self.count,
+        }
     }
 }
 

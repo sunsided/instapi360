@@ -42,7 +42,9 @@ impl Client {
         let resp = req.send().await?;
         let status = resp.status();
         if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(Error::Auth("OSS url expired (403) — re-resolve download".into()));
+            return Err(Error::Auth(
+                "OSS url expired (403) — re-resolve download".into(),
+            ));
         }
         let resp = resp.error_for_status()?;
 
@@ -68,7 +70,10 @@ impl Client {
 
         if let Some(t) = total {
             if done < t {
-                return Err(Error::Partial { got: done, expected: t });
+                return Err(Error::Partial {
+                    got: done,
+                    expected: t,
+                });
             }
         }
         Ok(())

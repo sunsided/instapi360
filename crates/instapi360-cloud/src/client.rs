@@ -139,14 +139,12 @@ impl Client {
             return Err(Error::Auth(format!("401 from {url}")));
         }
 
-        let env: Envelope<T> = serde_json::from_str(&text).map_err(|e| {
-            Error::Api {
-                code: status.as_u16() as i64,
-                message: format!(
-                    "bad response from {url} (http {status}): {e}; body: {}",
-                    text.chars().take(200).collect::<String>()
-                ),
-            }
+        let env: Envelope<T> = serde_json::from_str(&text).map_err(|e| Error::Api {
+            code: status.as_u16() as i64,
+            message: format!(
+                "bad response from {url} (http {status}): {e}; body: {}",
+                text.chars().take(200).collect::<String>()
+            ),
         })?;
 
         if !env.is_ok() {
@@ -159,8 +157,10 @@ impl Client {
             return Err(Error::Api { code, message: msg });
         }
 
-        env.data
-            .ok_or_else(|| Error::Api { code: 0, message: "empty data".into() })
+        env.data.ok_or_else(|| Error::Api {
+            code: 0,
+            message: "empty data".into(),
+        })
     }
 
     // ----- account -----
@@ -170,14 +170,19 @@ impl Client {
     /// openapi host; `data` nests the profile under `account`.
     pub async fn profile(&self, session: &Session) -> Result<Profile> {
         let url = format!("{}/account/v2/getProfile", self.base);
-        let raw: Value = self.request(Method::GET, &url, Some(session), &[], None).await?;
+        let raw: Value = self
+            .request(Method::GET, &url, Some(session), &[], None)
+            .await?;
         let obj = raw.get("account").unwrap_or(&raw);
         // Parse leniently — the account object carries overlapping name-ish keys
         // (name/nickname/…) that trip serde's alias de-dup, so pick by hand.
         Ok(Profile {
             user_id: as_str(obj, &["userId", "ins_user_id", "id", "accountId", "openId"]),
             email: as_str(obj, &["userEmail", "email", "bindEmail"]),
-            name: as_str(obj, &["nickName", "nickname", "userName", "username", "name"]),
+            name: as_str(
+                obj,
+                &["nickName", "nickname", "userName", "username", "name"],
+            ),
         })
     }
 
@@ -192,7 +197,9 @@ impl Client {
             token: String,
         }
         let url = format!("{}/account/v2/refreshToken", self.base);
-        let d: RefreshData = self.request(Method::GET, &url, Some(session), &[], None).await?;
+        let d: RefreshData = self
+            .request(Method::GET, &url, Some(session), &[], None)
+            .await?;
         let expires_at = jwt_exp(&d.token);
         Ok(Session {
             user_token: d.token,
@@ -212,7 +219,9 @@ impl Client {
             ("pageNumber", cursor.page.to_string()),
             ("pageSize", cursor.count.to_string()),
         ];
-        let raw: Value = self.request(Method::GET, &url, Some(session), &q, None).await?;
+        let raw: Value = self
+            .request(Method::GET, &url, Some(session), &q, None)
+            .await?;
         parse_media_page(&raw, &cursor)
     }
 
@@ -221,9 +230,13 @@ impl Client {
     pub async fn media_detail(&self, session: &Session, id: &MediaId) -> Result<Media> {
         let url = format!("{}/cloud/service/media/view/detail", self.cloud_base);
         let q = [("mediaId", id.0.clone())];
-        let raw: Value = self.request(Method::GET, &url, Some(session), &q, None).await?;
-        parse_media(&raw)
-            .ok_or_else(|| Error::Api { code: 0, message: "detail had no media".into() })
+        let raw: Value = self
+            .request(Method::GET, &url, Some(session), &q, None)
+            .await?;
+        parse_media(&raw).ok_or_else(|| Error::Api {
+            code: 0,
+            message: "detail had no media".into(),
+        })
     }
 
     /// Resolve the signed CDN download URL(s) for a media item
@@ -234,7 +247,9 @@ impl Client {
     pub async fn resolve_download(&self, session: &Session, id: &MediaId) -> Result<Vec<FilePart>> {
         let url = format!("{}/cloud/service/media/download", self.cloud_base);
         let q = [("mediaId", id.0.clone())];
-        let raw: Value = self.request(Method::GET, &url, Some(session), &q, None).await?;
+        let raw: Value = self
+            .request(Method::GET, &url, Some(session), &q, None)
+            .await?;
         let parts = parse_file_parts(&raw);
         if parts.is_empty() {
             return Err(Error::Api {
@@ -306,35 +321,55 @@ fn classify(media_type: Option<&str>, name: &str) -> MediaKind {
 fn parse_file_parts(v: &Value) -> Vec<FilePart> {
     // `paths` is the download-resolve shape ([{index,name,size,url}]); the
     // others cover detail/upload variants.
-    let arr = ["paths", "files", "fileList", "mediaUploadRespList", "downloadList"]
-        .iter()
-        .find_map(|k| v.get(k).and_then(|x| x.as_array()))
-        // Some responses nest under `data`.
-        .or_else(|| v.get("data").and_then(|d| {
-            ["paths", "files", "fileList"].iter().find_map(|k| d.get(k).and_then(|x| x.as_array()))
-        }));
+    let arr = [
+        "paths",
+        "files",
+        "fileList",
+        "mediaUploadRespList",
+        "downloadList",
+    ]
+    .iter()
+    .find_map(|k| v.get(k).and_then(|x| x.as_array()))
+    // Some responses nest under `data`.
+    .or_else(|| {
+        v.get("data").and_then(|d| {
+            ["paths", "files", "fileList"]
+                .iter()
+                .find_map(|k| d.get(k).and_then(|x| x.as_array()))
+        })
+    });
 
     if let Some(items) = arr {
         return items
             .iter()
             .filter_map(|it| {
                 let url = as_str(it, &["download_url", "downloadUrl", "url", "downloadPath"])?;
-                let name = as_str(it, &["fileName", "file_name", "name"]) 
+                let name = as_str(it, &["fileName", "file_name", "name"])
                     .unwrap_or_else(|| url.rsplit('/').next().unwrap_or("part").to_string());
                 let size = as_u64(it, &["fileSize", "size", "mediaSize"]).unwrap_or(0);
                 let md5 = as_str(it, &["md5", "fileMd5", "coverMd5"]);
-                Some(FilePart { file_name: name, size, url, md5 })
+                Some(FilePart {
+                    file_name: name,
+                    size,
+                    url,
+                    md5,
+                })
             })
             .collect();
     }
 
     // Single-file shape: a bare download_url on the object itself.
     if let Some(url) = as_str(v, &["download_url", "downloadUrl", "url", "downloadPath"]) {
-        let name = as_str(v, &["mediaName", "fileName", "name"]) 
+        let name = as_str(v, &["mediaName", "fileName", "name"])
             .unwrap_or_else(|| url.rsplit('/').next().unwrap_or("media").to_string());
         let size = as_u64(v, &["downOriginalSize", "fileSize", "mediaSize"]).unwrap_or(0);
         let md5 = as_str(v, &["md5", "coverMd5"]);
-        return vec![FilePart { file_name: name, size, url, md5 }];
+        return vec![FilePart {
+            file_name: name,
+            size,
+            url,
+            md5,
+        }];
     }
 
     Vec::new()
@@ -346,10 +381,23 @@ fn parse_media(v: &Value) -> Option<Media> {
     let name = as_str(v, &["mediaName", "name", "fileName"]).unwrap_or_else(|| id.clone());
     let media_type = as_str(v, &["mediaType", "type"]);
     let kind = classify(media_type.as_deref(), &name);
-    let size = as_u64(v, &["mediaSize", "downOriginalSize", "fileSize", "file_size"]).unwrap_or(0);
+    let size = as_u64(
+        v,
+        &["mediaSize", "downOriginalSize", "fileSize", "file_size"],
+    )
+    .unwrap_or(0);
     // Times are unix milliseconds in this API (e.g. createTime 1787429512249).
-    let time = as_u64(v, &["createTime", "mediaTime", "create_time", "upload_time_s"])
-        .map(|u| if u > 1_000_000_000_000 { (u / 1000) as i64 } else { u as i64 });
+    let time = as_u64(
+        v,
+        &["createTime", "mediaTime", "create_time", "upload_time_s"],
+    )
+    .map(|u| {
+        if u > 1_000_000_000_000 {
+            (u / 1000) as i64
+        } else {
+            u as i64
+        }
+    });
     let camera = as_str(v, &["cameraType", "camera_name", "cameraName", "camera"]);
 
     // Prefer the download-resolve `paths` (with URLs); otherwise synthesize
@@ -361,11 +409,24 @@ fn parse_media(v: &Value) -> Option<Media> {
             parts = items
                 .iter()
                 .filter_map(|x| x.as_str())
-                .map(|n| FilePart { file_name: n.to_string(), size: 0, url: String::new(), md5: None })
+                .map(|n| FilePart {
+                    file_name: n.to_string(),
+                    size: 0,
+                    url: String::new(),
+                    md5: None,
+                })
                 .collect();
         }
     }
-    Some(Media { id: MediaId(id), name, kind, size_original: size, time_unix: time, camera, parts })
+    Some(Media {
+        id: MediaId(id),
+        name,
+        kind,
+        size_original: size,
+        time_unix: time,
+        camera,
+        parts,
+    })
 }
 
 /// Parse a list response into a page.

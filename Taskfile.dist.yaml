@@ -1,0 +1,112 @@
+version: '3'
+
+# Task runner for the instapi360 workspace (https://taskfile.dev).
+# Run `task` with no args to list tasks. Override the build profile with
+# PROFILE=release, e.g. `task build PROFILE=release`.
+
+vars:
+  PROFILE: '{{ .PROFILE | default "debug" }}'
+  PROFILE_FLAG: '{{ if eq .PROFILE "release" }}--release{{ end }}'
+  BIN: instapi360-cli
+
+tasks:
+  default:
+    cmds:
+      - task --list --sort=none
+    silent: true
+
+  build:
+    desc: Compile the whole workspace (PROFILE=debug|release)
+    preconditions:
+      - sh: command -v cargo
+        msg: "cargo not found — install Rust from https://rustup.rs/"
+    cmds:
+      - cargo build --workspace --all-targets {{.PROFILE_FLAG}}
+
+  build:release:
+    desc: Compile the workspace in release mode
+    cmds:
+      - task: build
+        vars: { PROFILE: release }
+
+  run:
+    desc: "Run the instapi360 CLI (pass args after --, e.g. task run -- list --all)"
+    preconditions:
+      - sh: command -v cargo
+        msg: "cargo not found — install Rust from https://rustup.rs/"
+    cmds:
+      - cargo run -p {{.BIN}} {{.PROFILE_FLAG}} -- {{.CLI_ARGS}}
+
+  test:
+    desc: "Run the test suite (pass args after --, e.g. task test -- signing)"
+    preconditions:
+      - sh: command -v cargo
+        msg: "cargo not found — install Rust from https://rustup.rs/"
+    cmds:
+      - cargo test --workspace {{.CLI_ARGS}}
+
+  fmt:
+    desc: Format all code
+    aliases: [format]
+    preconditions:
+      - sh: cargo fmt --version >/dev/null 2>&1
+        msg: "rustfmt not found — rustup component add rustfmt"
+    cmds:
+      - cargo fmt --all
+
+  fmt:check:
+    desc: Check formatting without modifying files
+    preconditions:
+      - sh: cargo fmt --version >/dev/null 2>&1
+        msg: "rustfmt not found — rustup component add rustfmt"
+    cmds:
+      - cargo fmt --all --check
+
+  lint:
+    desc: Lint with clippy (warnings are errors)
+    preconditions:
+      - sh: cargo clippy --version >/dev/null 2>&1
+        msg: "clippy not found — rustup component add clippy"
+    cmds:
+      - cargo clippy --workspace --all-targets -- -D warnings
+
+  lint:fix:
+    desc: Lint and apply clippy's automatic fixes
+    aliases: [fix]
+    preconditions:
+      - sh: cargo clippy --version >/dev/null 2>&1
+        msg: "clippy not found — rustup component add clippy"
+    cmds:
+      - cargo clippy --workspace --all-targets --fix --allow-dirty --allow-staged -- -D warnings
+
+  check:
+    desc: All static checks (format + lint)
+    cmds:
+      - task: fmt:check
+      - task: lint
+
+  ci:
+    desc: Full CI sequence (static checks + tests)
+    cmds:
+      - task: check
+      - task: test
+
+  docs:
+    desc: Build API docs for the workspace crates
+    preconditions:
+      - sh: command -v cargo
+        msg: "cargo not found — install Rust from https://rustup.rs/"
+    cmds:
+      - cargo doc --workspace --no-deps {{.PROFILE_FLAG}}
+
+  docs:open:
+    desc: Build API docs and open them in the browser
+    cmds:
+      - cargo doc --workspace --no-deps --open
+
+  clean:
+    desc: Remove build output
+    status:
+      - test ! -d target
+    cmds:
+      - cargo clean

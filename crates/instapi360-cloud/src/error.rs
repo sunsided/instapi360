@@ -38,7 +38,11 @@ pub enum Error {
 
     /// A downloaded part failed its MD5 integrity check.
     #[error("checksum mismatch for {file}: expected {expected}, got {got}")]
-    Checksum { file: String, expected: String, got: String },
+    Checksum {
+        file: String,
+        expected: String,
+        got: String,
+    },
 
     /// A malformed or unexpected URL.
     #[error("invalid url: {0}")]

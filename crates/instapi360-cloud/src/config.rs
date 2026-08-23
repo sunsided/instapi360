@@ -7,9 +7,10 @@ use std::fmt;
 /// Cloud environment / region. The base host is region-selected; this user's
 /// desktop `startup.ini` reported `current_area=OverSea` →
 /// `HOST_OPENAPI_INSTA360=openapi-g.insta360.com`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Region {
     /// Global / OverSea: `openapi-g.insta360.com`.
+    #[default]
     Global,
     /// Mainland China: `openapi.insta360.com`.
     Cn,
@@ -46,12 +47,6 @@ impl Region {
             Region::Cn => "1",
             _ => "0",
         }
-    }
-}
-
-impl Default for Region {
-    fn default() -> Self {
-        Region::Global
     }
 }
 
