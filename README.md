@@ -31,7 +31,10 @@ cargo run -p instapi360-cli -- --help
 
 ## Usage
 ```sh
-# 1. store your own session token, once (from the app you're signed into)
+# 1a. interactive login — opens a browser, you sign in (and solve any captcha),
+#     the token is captured automatically  (needs Chrome/Chromium)
+instapi360 login
+# 1b. …or paste a token you already have
 instapi360 import-token "<session-token>"
 
 # 2. use it — equipment code auto-detects your host and is remembered
@@ -44,6 +47,10 @@ instapi360 download all --out ./footage --resume
 instapi360 refresh        # or let commands auto-renew when near expiry
 ```
 
+The `login` command is behind the **`login`** cargo feature, **on by default**.
+It pulls a Chrome-automation dependency; for a lean, token-import-only build:
+`cargo build --no-default-features`.
+
 ## How it works
 - **Sign in once, stay signed in.** Authentication is your session token alone
   (sent as a header) — no request signing. The token lives ~30 days and is
@@ -51,9 +58,10 @@ instapi360 refresh        # or let commands auto-renew when near expiry
   current one (no separate refresh token). `whoami`/`list`/`download`
   auto-renew when the token is within a few days of expiring, so a single
   import keeps working indefinitely.
-- Email/password `login` is intentionally **not** implemented: the sign-in
-  endpoint is reCAPTCHA-gated, so credential login only works in a real
-  browser. Import a token instead; refresh does the rest.
+- The sign-in endpoint is reCAPTCHA-gated, so a headless credential POST won't
+  work. `login` therefore drives a **real browser** (via the Chrome DevTools
+  Protocol): you sign in and solve any challenge, and the session token is read
+  back from the page and stored. `import-token` is the manual alternative.
 - Listing and download resolution are authenticated GET requests. Downloads
   resolve to short-lived CDN URLs and stream with **resumable, ranged**
   transfers; multi-file media (video + proxy, or dual-lens parts) are grouped
@@ -65,7 +73,6 @@ instapi360 refresh        # or let commands auto-renew when near expiry
 can be embedded in other apps — desktop or mobile — not just this CLI.
 
 ## Roadmap
-- Browser-assisted first login (solve the captcha once, capture the token automatically).
 - Media metadata (camera, timestamps, gyro/immersion data) surfaced in `list`.
 
 ## License

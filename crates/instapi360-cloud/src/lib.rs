@@ -37,7 +37,7 @@ mod model;
 mod session;
 mod signing;
 
-pub use client::{jwt_exp, Client};
+pub use client::{jwt_exp, session_token_exp, Client};
 pub use config::{ClientConfig, Platform, Region};
 pub use download::ProgressSink;
 pub use error::{Error, Result};

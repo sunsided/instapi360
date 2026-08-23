@@ -288,15 +288,30 @@ fn as_str(v: &Value, keys: &[&str]) -> Option<String> {
     None
 }
 
-/// Decode a JWT's `exp` (unix seconds) without verifying the signature.
-pub fn jwt_exp(token: &str) -> Option<i64> {
+fn jwt_payload(token: &str) -> Option<Value> {
     use base64::Engine;
     let payload = token.split('.').nth(1)?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(payload)
         .ok()?;
-    let v: Value = serde_json::from_slice(&bytes).ok()?;
-    v.get("exp").and_then(|x| x.as_i64())
+    serde_json::from_slice(&bytes).ok()
+}
+
+/// Decode a JWT's `exp` (unix seconds) without verifying the signature.
+pub fn jwt_exp(token: &str) -> Option<i64> {
+    jwt_payload(token)?.get("exp").and_then(|x| x.as_i64())
+}
+
+/// If `token` looks like an Insta360 **session** token (a JWT whose payload
+/// carries `openId`), return its `exp` (unix seconds). Used to pick the real
+/// session token out of arbitrary strings scraped from a browser session.
+pub fn session_token_exp(token: &str) -> Option<i64> {
+    let p = jwt_payload(token)?;
+    if p.get("openId").is_some() {
+        p.get("exp").and_then(|x| x.as_i64())
+    } else {
+        None
+    }
 }
 
 fn classify(media_type: Option<&str>, name: &str) -> MediaKind {

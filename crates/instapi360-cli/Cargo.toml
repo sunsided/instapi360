@@ -9,6 +9,12 @@ description = "CLI to list and download original media from the Insta360 cloud."
 name = "instapi360"
 path = "src/main.rs"
 
+[features]
+# Browser-assisted `login` — pulls a Chrome/CDP automation dependency. On by
+# default; build with `--no-default-features` for a lean, token-import-only CLI.
+default = ["login"]
+login = ["dep:chromiumoxide", "dep:futures"]
+
 [dependencies]
 instapi360-cloud = { path = "../instapi360-cloud" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "fs", "time"] }
@@ -20,3 +26,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+# Interactive login (feature = "login"): drive a real browser via CDP so the
+# user completes sign-in + any captcha, then read the session token back.
+chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"], optional = true }
+futures = { workspace = true, optional = true }

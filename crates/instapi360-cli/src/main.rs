@@ -5,6 +5,8 @@
 //! the session renews itself headlessly via `/account/v2/refreshToken` — no
 //! repeated login. Credential `login` is blocked by reCAPTCHA and is a stub.
 
+#[cfg(feature = "login")]
+mod login;
 mod store;
 
 use std::path::PathBuf;
@@ -68,13 +70,9 @@ enum Command {
     },
     /// Renew the stored session (mints a fresh token from the current one).
     Refresh,
-    /// Credential login — blocked by reCAPTCHA; prints guidance. Use import-token.
-    Login {
-        #[arg(long, env = "INSTA360_EMAIL")]
-        email: String,
-        #[arg(long, env = "INSTA360_PASSWORD")]
-        password: String,
-    },
+    /// Interactive login: open a browser, sign in, capture the session token.
+    /// (Requires the `login` feature — on by default.)
+    Login,
     /// Show the authenticated account profile.
     Whoami,
     /// List cloud media.
@@ -243,15 +241,19 @@ async fn main() -> Result<()> {
             );
         }
 
-        Command::Login {
-            email: _,
-            password: _,
-        } => {
-            return Err(anyhow!(
-                "headless email/password login is blocked by reCAPTCHA on the sign-in \
-                 endpoint. Use `import-token` (with --refresh-token) instead; the session \
-                 renews via `refresh` without re-login."
-            ));
+        Command::Login => {
+            #[cfg(feature = "login")]
+            {
+                login::run(&store).await?;
+            }
+            #[cfg(not(feature = "login"))]
+            {
+                return Err(anyhow!(
+                    "this build was compiled without the `login` feature. Rebuild with \
+                     it enabled, or use `import-token` — the sign-in endpoint is \
+                     reCAPTCHA-gated so login needs a real browser."
+                ));
+            }
         }
 
         Command::Whoami => {
