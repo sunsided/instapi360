@@ -21,14 +21,23 @@ const LOGIN_URL: &str =
 
 /// Open a browser, wait for the user to sign in, capture and store the token.
 pub async fn run(store: &FileSessionStore) -> Result<()> {
-    let (mut browser, mut handler) = Browser::launch(
-        BrowserConfig::builder()
-            .with_head()
-            .build()
-            .map_err(|e| anyhow!("browser config error: {e}"))?,
-    )
-    .await
-    .context("launching a browser (is Chrome/Chromium installed and on PATH?)")?;
+    // Use an isolated, throwaway profile so we don't attach to (and get killed
+    // by) an already-running Chrome instance, and add the usual Linux hardening
+    // flags. A fresh profile means you sign in from scratch in this window.
+    let user_data_dir = std::env::temp_dir().join(format!("instapi360-cdp-{}", std::process::id()));
+    let config = BrowserConfig::builder()
+        .with_head()
+        .user_data_dir(&user_data_dir)
+        .arg("--no-first-run")
+        .arg("--no-default-browser-check")
+        .arg("--no-sandbox")
+        .arg("--disable-dev-shm-usage")
+        .build()
+        .map_err(|e| anyhow!("browser config error: {e}"))?;
+
+    let (mut browser, mut handler) = Browser::launch(config)
+        .await
+        .context("launching a browser (is Chrome/Chromium installed and on PATH?)")?;
 
     // The handler stream must be polled for the connection to make progress.
     let handler_task = tokio::spawn(async move {
@@ -51,6 +60,7 @@ pub async fn run(store: &FileSessionStore) -> Result<()> {
 
     let _ = browser.close().await;
     handler_task.abort();
+    let _ = std::fs::remove_dir_all(&user_data_dir);
 
     let token = result?;
     let mut session = Session::from_token(&token);
