@@ -51,6 +51,52 @@ The `login` command is behind the **`login`** cargo feature, **on by default**.
 It pulls a Chrome-automation dependency; for a lean, token-import-only build:
 `cargo build --no-default-features`.
 
+## Signing in
+
+**Requirement:** Chrome or Chromium installed (used only for the login window;
+the rest of the CLI needs no browser).
+
+### Browser login (recommended)
+```sh
+instapi360 login
+```
+1. A **fresh** Chrome window opens on the Insta360 sign-in page. It uses a
+   throwaway profile (removed afterwards), so it won't collide with a Chrome you
+   already have running — and you sign in from scratch in this window.
+2. Sign in with your account, solving any reCAPTCHA challenge that appears.
+3. Once you're signed in, the CLI reads the session token from the page and
+   stores it at `~/.config/instapi360/session.json`, then closes the browser.
+   You'll see: `Logged in — token stored … (expires in 30 days)`.
+
+The window waits up to 5 minutes for you to finish. Nothing is typed for you —
+you enter your own credentials directly into Insta360's page.
+
+### Manual token import (no browser)
+If you already have a session token (e.g. from a build without the `login`
+feature), store it directly:
+```sh
+instapi360 import-token "<session-token>"
+```
+
+### Staying signed in
+The token lasts ~30 days and **renews itself**: `whoami`, `list` and `download`
+auto-renew it when it's within a few days of expiring, and `instapi360 refresh`
+renews on demand. So `login` is a once-in-a-while action, not per-use.
+
+### Signing out
+Delete the stored session to sign out:
+```sh
+rm ~/.config/instapi360/session.json
+```
+
+### Troubleshooting
+- **`oneshot canceled` / no window** — usually an outdated Chrome-automation
+  stack against a very new Chrome. Update the toolchain (`cargo update`) and
+  ensure Chrome/Chromium is current.
+- **Headless/server box** — `login` needs a display for the browser window. On a
+  headless machine, run `login` on a desktop, copy `session.json` over, or use
+  `import-token`.
+
 ## How it works
 - **Sign in once, stay signed in.** Authentication is your session token alone
   (sent as a header) — no request signing. The token lives ~30 days and is
