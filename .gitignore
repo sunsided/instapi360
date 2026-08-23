@@ -1,0 +1,11 @@
+/target
+# RE working data — never commit captured tokens, keys, or footage
+*.flow
+*.har
+footage/
+
+# personal session handoff (machine-specific paths)
+RESUME.md
+
+# reverse-engineering helpers kept local, not published
+/tools/

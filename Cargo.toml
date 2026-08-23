@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/instapi360-cloud",
+    "crates/instapi360-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sunsided/instapi360"
+rust-version = "1.82"
+
+[workspace.dependencies]
+# Async + HTTP (rustls only — never native-tls, keeps Android cross-compile clean)
+tokio = { version = "1", default-features = false }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+futures = "0.3"
+bytes = "1"
+# Serde
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Signing / crypto
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+# Errors, time, util
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+url = "2"
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+anyhow = "1"
+indicatif = "0.17"
+directories = "5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
