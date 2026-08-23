@@ -22,16 +22,12 @@ const LOGIN_URL: &str =
 /// Open a browser, wait for the user to sign in, capture and store the token.
 pub async fn run(store: &FileSessionStore) -> Result<()> {
     // Use an isolated, throwaway profile so we don't attach to (and get killed
-    // by) an already-running Chrome instance, and add the usual Linux hardening
-    // flags. A fresh profile means you sign in from scratch in this window.
+    // by) an already-running Chrome instance. chromiumoxide already applies the
+    // usual automation flags (no-first-run, disable-dev-shm-usage, …).
     let user_data_dir = std::env::temp_dir().join(format!("instapi360-cdp-{}", std::process::id()));
     let config = BrowserConfig::builder()
         .with_head()
         .user_data_dir(&user_data_dir)
-        .arg("--no-first-run")
-        .arg("--no-default-browser-check")
-        .arg("--no-sandbox")
-        .arg("--disable-dev-shm-usage")
         .build()
         .map_err(|e| anyhow!("browser config error: {e}"))?;
 
@@ -42,7 +38,8 @@ pub async fn run(store: &FileSessionStore) -> Result<()> {
     // The handler stream must be polled for the connection to make progress.
     let handler_task = tokio::spawn(async move {
         while let Some(ev) = handler.next().await {
-            if ev.is_err() {
+            if let Err(e) = ev {
+                eprintln!("CDP handler error: {e:?}");
                 break;
             }
         }
